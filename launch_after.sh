@@ -1,4 +1,3 @@
-
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
@@ -17,12 +16,12 @@ if ! grep -q '^\[LightDM\]' "$CONFIG"; then
     exit 1
 fi
 
-echo "[1/4] Sauvegarde..."
+echo "[1/5] Sauvegarde..."
 sudo cp -a "$CONFIG" "$BACKUP"
 echo "Backup : $BACKUP"
 
 echo
-echo "[2/4] Configuration..."
+echo "[2/5] Configuration LightDM..."
 
 sudo python3 - "$CONFIG" <<'PY'
 import pathlib
@@ -71,11 +70,43 @@ path.write_text("\n".join(output) + "\n")
 PY
 
 echo
-echo "[3/4] Vérification..."
+echo "[3/5] Configuration rotation tactile HyperPixel 180°..."
+
+sudo mkdir -p /etc/X11/xorg.conf.d
+
+sudo tee /etc/X11/xorg.conf.d/99-hyperpixel-touch.conf >/dev/null <<'EOF'
+Section "InputClass"
+    Identifier "HyperPixel Touch Rotation"
+    MatchProduct "EP0110M09"
+    Option "TransformationMatrix" "-1 0 1 0 -1 1 0 0 1"
+EndSection
+EOF
+
+echo "Rotation tactile 180° enregistrée."
+
+echo
+echo "[4/5] Application immédiate..."
+
+TOUCH_ID=$(DISPLAY=:0 xinput list --id-only "11-0048 EP0110M09" 2>/dev/null || true)
+
+if [[ -n "${TOUCH_ID}" ]]; then
+    DISPLAY=:0 xinput set-prop "$TOUCH_ID" \
+        "Coordinate Transformation Matrix" \
+        -1 0 1 \
+        0 -1 1 \
+        0 0 1 || true
+
+    echo "Rotation appliquée au périphérique ID $TOUCH_ID"
+else
+    echo "Touchscreen non trouvé dans la session X. La rotation sera appliquée au prochain démarrage."
+fi
+
+echo
+echo "[5/5] Vérification puis redémarrage de LightDM..."
+
 sudo grep -A 8 '^\[LightDM\]' "$CONFIG"
 
 echo
-echo "[4/4] Redémarrage de LightDM..."
 sudo systemctl restart lightdm
 
 sleep 5
